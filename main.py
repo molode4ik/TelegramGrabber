@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 from telethon import TelegramClient
 
 
@@ -13,7 +14,7 @@ def load_config(path='config.ini'):
 
 #Get all dialogs
 #Saving name of each dialog to json
-async def save_user_dialogs(client, dialogs_list):
+async def save_user_dialogs(dialogs_list):
     dialogs = {}
     for dialog in dialogs_list:
         if dialog.name != "":
@@ -26,9 +27,9 @@ async def save_user_dialogs(client, dialogs_list):
 #In json you can leave those channels whose data we need
 
 
-async def main():
+async def main(path):
     try:
-        api_id, api_hash, phone = load_config('config.ini')
+        api_id, api_hash = load_config('config.ini')
     except:
         print('You dont have a config file\nCreate it before working')
     #Log in Telegram
@@ -39,36 +40,41 @@ async def main():
         with open('dialogs_names.json', encoding="utf8") as file:
             chosed_dialogs = json.load(file)
     except:
+        print('You havent a dialogs list \n'
+        'This file will create now\n'
+        'Check this and remove extra dialogs')
         dialogs_list = await client.get_dialogs()
-        await save_user_dialogs(client, dialogs_list)   
+        await save_user_dialogs(dialogs_list)   
     
-    await parse_data(client, chosed_dialogs)
+    await parse_data(client, chosed_dialogs, path)
     
         
    
 #Parcing data from chosed dialogs
 #Save messages and media to folder of channel
-async def parse_data(client, chosed_dialogs):
+async def parse_data(client, chosed_dialogs, path):
     print('Parsing')
-    path_to_folder = os.path.abspath('Telegram.session')
-    main_dir = path_to_folder.split('Telegram.session')[0]
     await client.get_dialogs() 
     for id in chosed_dialogs.keys():
         data = {}
-        #os.mkdir(f"{main_dir}Media\\")
-        os.mkdir(f"{main_dir}Media\\{chosed_dialogs.get(id)}\\")
+        os.makedirs(f"{path}Media\\{chosed_dialogs.get(id)}\\", mode=0o777)
         async for message in client.iter_messages(int(id)):
             if message.media is None:
                 data.update({str(message.date).split('+')[0] : message.text})
             elif message.file is not None:
-                await client.download_media(message = message.media, file=f"Media\\{chosed_dialogs.get(id)}\\{str(message.file.name)}")
+                await client.download_media(message = message.media, file=f"{path}Media\\{chosed_dialogs.get(id)}\\{(str(message.date).split('+')[0]).replace(':', '-')} {str(message.file.name)}")
         
-        with open(f"Media\\{chosed_dialogs.get(id)}\\messages.json", 'w', encoding='utf-8') as file:
-            file.write(json.dumps(data, ensure_ascii=False))
+        save_data = {v: k for k, v in data.items()}
+        with open(f"{path}Media\\{chosed_dialogs.get(id)}\\messages.json", 'w', encoding='utf-8') as file:
+            file.write(json.dumps(save_data, ensure_ascii=False))
 
     print('All is done')
     
 
 if __name__ == "__main__":
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(main())
+    if len(sys.argv) < 2:
+        print('You didnt set the path to saved files')
+        sys.exit()
+    else:
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(main(path=sys.argv[1]))
